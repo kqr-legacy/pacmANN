@@ -1,7 +1,7 @@
 module Main where
 
 import Control.Monad        (guard)
-import Control.Monad.Random (StdGen, newStdGen, Rand, runRand, getRandom, getRandomR)
+import Control.Monad.Random (newStdGen)
 import Graphics.Gloss       (simulate, Display(InWindow), black)
 
 import LevelConf            (level1, levelWidth, levelHeight, tileSize)
