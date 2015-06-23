@@ -1,10 +1,14 @@
-module Step (step, exits) where
+module Step (step) where
 
-import Control.Monad        (guard)
-import Control.Monad.Random (StdGen, newStdGen, Rand, runRand, getRandomR)
+import Data.List             (delete)
+import Control.Monad         (guard)
+import Control.Monad.Random  (StdGen, Rand, runRand)
+import System.Random.Shuffle (shuffleM)
 import Lens.Family2
 
-import Types
+import IPoint                (IPoint)
+import Simulation
+import Ghost
 
 
 step :: anytype -> Float -> Simulation -> Simulation
@@ -12,61 +16,45 @@ step _ delta sim =
     let
         (newSim, newGen) =
             flip runRand (sim ^. randomGen) $ do
-                newGhosts <- moveGhosts delta (sim ^. level)
+                newGhosts <- moveGhosts delta (sim ^. speed) (sim ^. level)
                 return (sim & level . ghosts .~ newGhosts)
 
     in
         newSim & tick +~ delta
                & randomGen .~ newGen
 
-  where
-    moveGhosts :: Float -> Level -> Rand StdGen [Ghost]
-    moveGhosts delta lvl =
-        mapM (ghostMove delta lvl) (lvl ^. ghosts)
 
-    -- Ugly as fuck code for ghost AI. Needs to be refactored eventually
-    ghostMove :: Float -> Level -> Ghost -> Rand StdGen Ghost
-    ghostMove delta lvl ghost =
-        let
-            newGhost =
-                ghost & progress +~ (delta * 2)
-            newPos =
-                if newGhost ^. progress >= 1 then nextPos ghost else ghost ^. position
-            switchDir =
-                or [ any (== nextPos newGhost) (lvl ^. walls)
-                   , newGhost ^. progress >= 1
-                   ]
-            possible =
-                exits newPos (lvl ^. walls)
-
-        in
-            if not switchDir then
-                return newGhost
-            else do
-                next <-
-                    case length possible of
-                        0 -> return (ghost ^. direction)
-                        1 -> return (possible !! 0)
-                        _ -> choose (filter (/= dirOpposite (ghost ^. direction)) possible)
-                return $
-                    newGhost & position .~ newPos
-                             & progress .~ 0
-                             & direction .~ next
+moveGhosts :: Float -> Float -> Level -> Rand StdGen [Ghost]
+moveGhosts delta speed lvl =
+    mapM (ghostMove delta speed lvl) (lvl ^. ghosts)
 
 
+-- Ugly as fuck code for ghost AI. Needs to be refactored eventually
+ghostMove :: Float -> Float -> Level -> Ghost -> Rand StdGen Ghost
+ghostMove delta speed lvl ghost =
+    if ghost ^. progress >= 0.5 then do
+        next <- pickExits ghost (lvl ^. walls)
+        return $
+            ghost & position .~ (ghost ^. nextPos)
+                  & progress .~ (-0.5)
+                  & validExits .~ next
+    else
+        return (ghost & progress +~ delta*speed*2)
 
--- Get all the directions you can go from `from` without bumping into any of
--- the positions `occupied`. Currently used to figure out which ways a ghost
--- can go without bumping into walls
-exits :: IPoint -> [IPoint] -> [Direction]
+
+pickExits :: Ghost -> [IPoint] -> Rand StdGen [IPoint]
+pickExits ghost occupied =
+    case exits (ghost ^. nextPos) occupied of
+        []  -> return []
+        [p] -> return [p]
+        ps  -> fmap (++[ghost ^. position]) (shuffleM (delete (ghost ^. position) ps))
+
+
+-- Get all the tiles adjacent to `from` that are not `occupied`.
+exits :: IPoint -> [IPoint] -> [IPoint]
 exits from occupied = do
-    dir <- allDirections
-    guard $ all (\p -> p /= from + dirVector dir) occupied 
-    return dir
+    tile <- map (from+) [(-1,0),(0,-1),(0,1),(1,0)]
+    guard $ all (tile /=) occupied
+    return tile
 
-
--- Partially (!!) pick a random element from a list
-choose :: [a] -> Rand StdGen a
-choose [] = error "Trying to choose element from empty list!"
-choose xs = do { i <- getRandomR (0, length xs - 1); return (xs !! i) }
 

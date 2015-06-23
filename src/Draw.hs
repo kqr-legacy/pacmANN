@@ -4,9 +4,11 @@ import Lens.Family2
 import Graphics.Gloss
 import Graphics.Gloss.Data.Vector (mulSV)
 
-import LevelConf (levelWidth, levelHeight, tileSize)
-import Step (exits)
-import Types
+import LevelConf    (levelWidth, levelHeight, tileSize)
+import IPoint       (IPoint, point)
+import Simulation
+import Ghost
+
 
 draw :: Simulation -> Picture
 draw sim =
@@ -15,29 +17,46 @@ draw sim =
         , pictures (sim ^.. level . ghosts . traverse . to ghost)
         ]
 
+
+-- Takes coordinates spanning from (0,0) to (width,height) and displays them
+-- right-side-up with (0,0) in the middle.
+centreOrigin :: [Picture] -> Picture
+centreOrigin =
+    shift . invert . combine
   where
-    -- Takes coordinates spanning from (0,0) to (width,height) and displays them
-    -- right-side-up with (0,0) in the middle.
-    centreOrigin :: [Picture] -> Picture
-    centreOrigin =
-        translate (-levelWidth*tileSize/2) (levelHeight*tileSize/2) . scale 1 (-1) . mconcat
+    shift = translate (-levelWidth*tileSize/2) (levelHeight*tileSize/2)
+    invert = scale 1 (-1)
+    combine = mconcat
 
-    wall :: IPoint -> Picture
-    wall p = 
-        translateTile (toPoint p) (rectangleSolid tileSize tileSize)
 
-    -- Uuuugly code to draw a ghost moving smoothly across the level, with its
-    -- direction points around it.
-    ghost :: Ghost -> Picture
-    ghost ghost =
-        mconcat
-            [ color white (translateTile (toPoint (ghost ^. position) + (mulSV (ghost ^. progress) (toPoint (dirVector (ghost ^. direction))))) (circleSolid 12))
-            , color green (pictures [translateTile (toPoint (ghost ^. position) + toPoint (dirVector d)) (circleSolid 6) | d <- exits (ghost ^. position) (sim ^. level . walls)])
-            , color red (translateTile (toPoint (nextPos ghost)) (circleSolid 6))
-            ]
+wall :: IPoint -> Picture
+wall p = 
+    translateTile (point p) (rectangleSolid tileSize tileSize)
 
-    translateTile :: Point -> Picture -> Picture
-    translateTile p =
-        translate (fst p * tileSize) (snd p * tileSize)
+
+-- Draws the ghost including little circles indicating possible/taken directions
+ghost :: Ghost -> Picture
+ghost ghost =
+    mconcat
+        [ color white (translateTile (ghostDrawPoint ghost) (circleSolid 12))
+        , color green (pictures [translateTile (point d) (circleSolid 6) | d <- ghost ^. validExits])
+        , color red (translateTile (point (ghost ^. nextPos)) (circleSolid 6))
+        ]
+  where
+    ghostDrawPoint ghost =
+        let
+            curPos = ghost ^. position . to point
+            along =
+                if ghost ^. progress >= 0 then
+                    ghost ^. nextPos . to point - curPos
+                else
+                    curPos - ghost ^. prevPos . to point
+        in
+            curPos + mulSV (ghost ^. progress) along
+
+
+translateTile :: Point -> Picture -> Picture
+translateTile p =
+    translate (fst p * tileSize) (snd p * tileSize)
 
 

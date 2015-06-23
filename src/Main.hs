@@ -5,15 +5,17 @@ import Control.Monad.Random (newStdGen)
 import Graphics.Gloss       (simulate, Display(InWindow), black)
 
 import LevelConf            (level1, levelWidth, levelHeight, tileSize)
+import IPoint               (IPoint)
+import Simulation           (Simulation(Simulation), Level(Level))
+import Ghost                (Ghost, mkGhost)
 import Step                 (step)
 import Draw                 (draw)
-import Types
 
 
 main :: IO ()
 main = do
     gen <- newStdGen
-    let sim = Simulation 0 gen (parseLevel level1)
+    let sim = Simulation 0 1 gen (parseLevel level1)
 
     simulate (InWindow "PacmANN" (levelWidth*tileSize, levelHeight*tileSize) (0, 0))
         black 60
@@ -29,7 +31,7 @@ parseLevel source =
     parseWalls = parseTile '#' id
 
     parseGhosts :: [[Char]] -> [Ghost]
-    parseGhosts = parseTile 'm' (\p -> Ghost p DLeft 0)
+    parseGhosts = parseTile 'm' mkGhost
 
     parseTile :: Char -> (IPoint -> a) -> [[Char]] -> [a]
     parseTile target constructor source = do
