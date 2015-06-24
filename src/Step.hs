@@ -29,7 +29,6 @@ moveGhosts delta speed lvl =
     mapM (ghostMove delta speed lvl) (lvl ^. ghosts)
 
 
--- Ugly as fuck code for ghost AI. Needs to be refactored eventually
 ghostMove :: Float -> Float -> Level -> Ghost -> Rand StdGen Ghost
 ghostMove delta speed lvl ghost =
     if ghost ^. progress >= 0.5 then do
